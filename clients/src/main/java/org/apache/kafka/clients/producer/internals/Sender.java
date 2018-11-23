@@ -156,7 +156,7 @@ public class Sender implements Runnable {
     public void run() {
         log.debug("Starting Kafka producer I/O thread.");
 
-        // main loop, runs until close is called
+        //主循环，在close之前一直运行
         while (running) {
             try {
                 run(time.milliseconds());
@@ -170,6 +170,7 @@ public class Sender implements Runnable {
         // okay we stopped accepting requests but there may still be
         // requests in the accumulator or waiting for acknowledgment,
         // wait until these are completed.
+        //如果不是强制关闭，并且accumulator中还有未发送的数据或者等待ack的request继续运行
         while (!forceClose && (this.accumulator.hasUndrained() || this.client.inFlightRequestCount() > 0)) {
             try {
                 run(time.milliseconds());
@@ -177,12 +178,13 @@ public class Sender implements Runnable {
                 log.error("Uncaught error in kafka producer I/O thread: ", e);
             }
         }
+
         if (forceClose) {
-            // We need to fail all the incomplete batches and wake up the threads waiting on
-            // the futures.
+            //强制关闭
             this.accumulator.abortIncompleteBatches();
         }
         try {
+            //关闭kafka client
             this.client.close();
         } catch (Exception e) {
             log.error("Failed to close network client", e);
@@ -225,11 +227,14 @@ public class Sender implements Runnable {
     }
 
     private long sendProducerData(long now) {
+        //获取集群信息
         Cluster cluster = metadata.fetch();
         // get the list of partitions with data ready to send
+        //从缓存区中选择出可以向哪些Node节点发送消息,具体怎么选择的，下面会分析
         RecordAccumulator.ReadyCheckResult result = this.accumulator.ready(cluster, now);
 
         // if there are any partitions whose leaders are not known yet, force metadata update
+        //如果存在不知道leader的partition强制更新metadata
         if (!result.unknownLeaderTopics.isEmpty()) {
             // The set of topics with unknown leader contains topics with leader election pending as well as
             // topics which may have expired. Add the topic again to metadata to ensure it is included
@@ -244,6 +249,7 @@ public class Sender implements Runnable {
         long notReadyTimeout = Long.MAX_VALUE;
         while (iter.hasNext()) {
             Node node = iter.next();
+            //判断clint是否具备发送条件
             if (!this.client.ready(node, now)) {
                 iter.remove();
                 notReadyTimeout = Math.min(notReadyTimeout, this.client.connectionDelay(node, now));

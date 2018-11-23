@@ -34,14 +34,21 @@ import java.util.Set;
 public final class Cluster {
 
     private final boolean isBootstrapConfigured;
+    //kafka集群的broker信息
     private final List<Node> nodes;
     private final Set<String> unauthorizedTopics;
     private final Set<String> internalTopics;
+    //Controller节点
     private final Node controller;
+    //topic-partition到partitionInfo的映射信息
     private final Map<TopicPartition, PartitionInfo> partitionsByTopicPartition;
+    //topic到PartitionInfo的映射
     private final Map<String, List<PartitionInfo>> partitionsByTopic;
+    //topic到可用分区的映射
     private final Map<String, List<PartitionInfo>> availablePartitionsByTopic;
+    //维护节点node和具体的分区信息，可以根据某个节点查询这个节点里的所有分区信息
     private final Map<Integer, List<PartitionInfo>> partitionsByNode;
+    //维护节点ID和Node的映射信息
     private final Map<Integer, Node> nodesById;
     private final ClusterResource clusterResource;
 

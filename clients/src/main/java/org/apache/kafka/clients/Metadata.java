@@ -54,14 +54,19 @@ public final class Metadata {
     public static final long TOPIC_EXPIRY_MS = 5 * 60 * 1000;
     private static final long TOPIC_EXPIRY_NEEDS_UPDATE = -1L;
 
+    //更新失败的情况下，下一次更新的等待时间
     private final long refreshBackoffMs;
+    //元数据过期时间
     private final long metadataExpireMs;
     private int version;
+    //上一次刷新元数据时间
     private long lastRefreshMs;
+    //上一次成功刷新元数据时间
     private long lastSuccessfulRefreshMs;
     private Cluster cluster;
     private boolean needUpdate;
     /* Topics with expiry time */
+    //存储topic过期时间
     private final Map<String, Long> topics;
     private final List<Listener> listeners;
     private final ClusterResourceListeners clusterResourceListeners;

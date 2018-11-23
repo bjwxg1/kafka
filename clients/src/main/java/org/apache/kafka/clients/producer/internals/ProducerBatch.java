@@ -56,10 +56,12 @@ public final class ProducerBatch {
 
     private static final Logger log = LoggerFactory.getLogger(ProducerBatch.class);
 
+    //发送状态枚举
     private enum FinalState { ABORTED, FAILED, SUCCEEDED }
-
+    //创建时间
     final long createdMs;
     final TopicPartition topicPartition;
+    //发送结果
     final ProduceRequestResult produceFuture;
 
     private final List<Thunk> thunks = new ArrayList<>();

@@ -20,12 +20,12 @@ package org.apache.kafka.common;
  * Information about a topic-partition.
  */
 public class PartitionInfo {
-
+    //topic
     private final String topic;
-    private final int partition;
-    private final Node leader;
-    private final Node[] replicas;
-    private final Node[] inSyncReplicas;
+    private final int partition;//partition id，一个topic可能会存在多个partition
+    private final Node leader;//leader 节点
+    private final Node[] replicas;//所有的副本节点
+    private final Node[] inSyncReplicas;//所有的ISR节点
 
     public PartitionInfo(String topic, int partition, Node leader, Node[] replicas, Node[] inSyncReplicas) {
         this.topic = topic;

@@ -227,24 +227,18 @@ public class Sender implements Runnable {
     }
 
     private long sendProducerData(long now) {
-        //获取集群信息
         Cluster cluster = metadata.fetch();
-        // get the list of partitions with data ready to send
-        //从缓存区中选择出可以向哪些Node节点发送消息,具体怎么选择的，下面会分析
+        //从RecordAccumulator，找出对应的，已经ready的Node
         RecordAccumulator.ReadyCheckResult result = this.accumulator.ready(cluster, now);
 
-        // if there are any partitions whose leaders are not known yet, force metadata update
         //如果存在不知道leader的partition强制更新metadata
         if (!result.unknownLeaderTopics.isEmpty()) {
-            // The set of topics with unknown leader contains topics with leader election pending as well as
-            // topics which may have expired. Add the topic again to metadata to ensure it is included
-            // and request metadata update, since there are messages to send to the topic.
             for (String topic : result.unknownLeaderTopics)
                 this.metadata.add(topic);
             this.metadata.requestUpdate();
         }
 
-        // remove any nodes we aren't ready to send to
+        // 移除client not ready的Node
         Iterator<Node> iter = result.readyNodes.iterator();
         long notReadyTimeout = Long.MAX_VALUE;
         while (iter.hasNext()) {

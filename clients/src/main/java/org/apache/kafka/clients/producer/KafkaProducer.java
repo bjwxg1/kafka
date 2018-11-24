@@ -392,12 +392,14 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
                     apiVersions,
                     transactionManager);
 
-            //解析broker address
+            //解析并校验bootstrap.servers中配置的Broker信息
             List<InetSocketAddress> addresses = ClientUtils.parseAndValidateAddresses(config.getList(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG));
+            //创建cluster并更新metadata
             this.metadata.update(Cluster.bootstrap(addresses), Collections.<String>emptySet(), time.milliseconds());
+            //创建具体的ChannelBuilder
             ChannelBuilder channelBuilder = ClientUtils.createChannelBuilder(config);
             Sensor throttleTimeSensor = Sender.throttleTimeSensor(metrics);
-            //创建和broker网络连接
+            //创建NetWorkClient
             NetworkClient client = new NetworkClient(
                     new Selector(config.getLong(ProducerConfig.CONNECTIONS_MAX_IDLE_MS_CONFIG),
                             this.metrics, time, "producer", channelBuilder),
@@ -878,34 +880,35 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
      */
     //在kafka消息发送之前需要先等待topic相关的元数据信息可用
     private ClusterAndWaitTime waitOnMetadata(String topic, Integer partition, long maxWaitMs) throws InterruptedException {
-        // add topic to metadata topic list if it is not there already and reset expiry
+        //将Topic添加到metadata,并将expiry重设为-1；
+        //如果topic之前在metadata中不存在则设置needUpdate为true
         metadata.add(topic);
         //获取Cluster信息
         Cluster cluster = metadata.fetch();
-        /获取分区数
+        /获取topic分区数
         Integer partitionsCount = cluster.partitionCountForTopic(topic);
-        // Return cached metadata if we have it, and if the record's partition is either undefined
-        // or within the known partition range
+        //注意下面的判断条件partition < partitionsCountpartition是传递进来的参数，
+        //如果partition >= partitionsCount可能partition配置信息已经更新
+        // 但是Producer还没有获取到最新的metadata所以会强制要求刷新
         if (partitionsCount != null && (partition == null || partition < partitionsCount))
             return new ClusterAndWaitTime(cluster, 0);
 
         long begin = time.milliseconds();
         long remainingWaitMs = maxWaitMs;
         long elapsed;
-        //注意下面是一个循环
+        //注意下面是一个循环，循环的结束条件是partitionsCount != null;或者超时或者topic没有权限
         //发送metadata request直到获取到metadata或者超时
         //需要注意的是如果partition < partitionsCount也会发送metadata request请求，主要是防止
         //kafka集群信息已经更新，但是producer端的cache还没有刷新
         do {
-            log.trace("Requesting metadata update for topic {}.", topic);
             metadata.add(topic);
             int version = metadata.requestUpdate();
+            //唤醒sender
             sender.wakeup();
             try {
                 //等待sender线程去更新元数据信息
                 metadata.awaitUpdate(version, remainingWaitMs);
             } catch (TimeoutException ex) {
-                // Rethrow with original maxWaitMs to prevent logging exception with remainingWaitMs
                 throw new TimeoutException("Failed to update metadata after " + maxWaitMs + " ms.");
             }
             cluster = metadata.fetch();

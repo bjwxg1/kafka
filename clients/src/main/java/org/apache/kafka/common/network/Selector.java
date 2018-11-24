@@ -85,10 +85,13 @@ public class Selector implements Selectable, AutoCloseable {
     public static final long NO_IDLE_TIMEOUT_MS = -1;
     private static final Logger log = LoggerFactory.getLogger(Selector.class);
 
+    //内置的nioSelector
     private final java.nio.channels.Selector nioSelector;
+    //保存了所有的KafkaChannel
     private final Map<String, KafkaChannel> channels;
     private final List<Send> completedSends;
     private final List<NetworkReceive> completedReceives;
+    //暂存所有接收到的消息
     private final Map<KafkaChannel, Deque<NetworkReceive>> stagedReceives;
     private final Set<SelectionKey> immediatelyConnectedKeys;
     private final Map<String, KafkaChannel> closingChannels;
@@ -124,10 +127,12 @@ public class Selector implements Selectable, AutoCloseable {
                     boolean recordTimePerConnection,
                     ChannelBuilder channelBuilder) {
         try {
+            //创建NIO selector
             this.nioSelector = java.nio.channels.Selector.open();
         } catch (IOException e) {
             throw new KafkaException(e);
         }
+        //设置一些具体的参数
         this.maxReceiveSize = maxReceiveSize;
         this.time = time;
         this.channels = new HashMap<>();
@@ -142,6 +147,7 @@ public class Selector implements Selectable, AutoCloseable {
         this.sensors = new SelectorMetrics(metrics, metricGrpPrefix, metricTags, metricsPerConnection);
         this.channelBuilder = channelBuilder;
         this.recordTimePerConnection = recordTimePerConnection;
+        //创建idleExpiryManage。跟踪Connection，close idel Connection
         this.idleExpiryManager = connectionMaxIdleMs < 0 ? null : new IdleExpiryManager(time, connectionMaxIdleMs);
     }
 
@@ -174,14 +180,18 @@ public class Selector implements Selectable, AutoCloseable {
      * @throws IOException if DNS resolution fails on the hostname or if the broker is down
      */
     @Override
+    //创建连接
     public void connect(String id, InetSocketAddress address, int sendBufferSize, int receiveBufferSize) throws IOException {
         if (this.channels.containsKey(id))
             throw new IllegalStateException("There is already a connection for id " + id);
 
         SocketChannel socketChannel = SocketChannel.open();
+        //设置为非阻塞
         socketChannel.configureBlocking(false);
         Socket socket = socketChannel.socket();
+        //keepAlive
         socket.setKeepAlive(true);
+        //设置sendBuffer和recvBuffer
         if (sendBufferSize != Selectable.USE_DEFAULT_BUFFER_SIZE)
             socket.setSendBufferSize(sendBufferSize);
         if (receiveBufferSize != Selectable.USE_DEFAULT_BUFFER_SIZE)
@@ -189,6 +199,7 @@ public class Selector implements Selectable, AutoCloseable {
         socket.setTcpNoDelay(true);
         boolean connected;
         try {
+            //进行连接操作，注意此处是异步操作，方法返回连接不已经建立成功
             connected = socketChannel.connect(address);
         } catch (UnresolvedAddressException e) {
             socketChannel.close();
@@ -197,9 +208,11 @@ public class Selector implements Selectable, AutoCloseable {
             socketChannel.close();
             throw e;
         }
+        //注册Connect时间
         SelectionKey key = socketChannel.register(nioSelector, SelectionKey.OP_CONNECT);
         KafkaChannel channel;
         try {
+            //根据ID，SelectionKey创建KafkaChannel
             channel = channelBuilder.buildChannel(id, key, maxReceiveSize);
         } catch (Exception e) {
             try {
@@ -210,6 +223,7 @@ public class Selector implements Selectable, AutoCloseable {
             throw new IOException("Channel could not be created for socket " + socketChannel, e);
         }
         key.attach(channel);
+        //添加到channels
         this.channels.put(id, channel);
 
         if (connected) {
@@ -244,8 +258,10 @@ public class Selector implements Selectable, AutoCloseable {
      * Close this selector and all associated connections
      */
     @Override
+    //关闭Selector和所有相关联的Connection
     public void close() {
         List<String> connections = new ArrayList<>(channels.keySet());
+
         for (String id : connections)
             close(id);
         try {
@@ -263,17 +279,21 @@ public class Selector implements Selectable, AutoCloseable {
      */
     public void send(Send send) {
         String connectionId = send.destination();
+        //判断connection是否正在关闭，是添加到failedSends
         if (closingChannels.containsKey(connectionId))
             this.failedSends.add(connectionId);
         else {
+            //获取KafkaChannel
             KafkaChannel channel = channelOrFail(connectionId, false);
             try {
+                //设置send【注意只能放置一个】，并在底层注册Write时间
                 channel.setSend(send);
             } catch (Exception e) {
                 // update the state for consistency, the channel will be discarded after `close`
-                channel.state(ChannelState.FAILED_SEND);
+                channel.state(ChannelState.FAILED_SENDFAILED_SEND);
                 // ensure notification via `disconnected` when `failedSends` are processed in the next poll
                 this.failedSends.add(connectionId);
+                //调用close方法进行关闭
                 close(channel, false, false);
                 if (!(e instanceof CancelledKeyException)) {
                     log.error("Unexpected exception during send, closing connection {} and rethrowing exception {}",
@@ -318,14 +338,16 @@ public class Selector implements Selectable, AutoCloseable {
     public void poll(long timeout) throws IOException {
         if (timeout < 0)
             throw new IllegalArgumentException("timeout should be >= 0");
-
+        //关键点：每次poll之前，会清空“输出”
         clear();
 
+        //判断是否有暂存的Recv
+        //TODO
         if (hasStagedReceives() || !immediatelyConnectedKeys.isEmpty())
             timeout = 0;
 
-        /* check ready keys */
         long startSelect = time.nanoseconds();
+        //调用底层select方法
         int readyKeys = select(timeout);
         long endSelect = time.nanoseconds();
         this.sensors.selectTime.record(endSelect - startSelect, time.milliseconds());
@@ -340,10 +362,12 @@ public class Selector implements Selectable, AutoCloseable {
 
         // we use the time at the end of select to ensure that we don't close any connections that
         // have just been processed in pollSelectionKeys
+        //关闭空闲连接
         maybeCloseOldestConnection(endSelect);
 
         // Add to completedReceives after closing expired connections to avoid removing
         // channels with completed receives until all staged receives are completed.
+        //将stagedReceives-》CompletedReceives
         addToCompletedReceives();
     }
 
@@ -354,12 +378,14 @@ public class Selector implements Selectable, AutoCloseable {
         while (iterator.hasNext()) {
             SelectionKey key = iterator.next();
             iterator.remove();
+            //获取key绑定的channel
             KafkaChannel channel = channel(key);
             long channelStartTimeNanos = recordTimePerConnection ? time.nanoseconds() : 0;
 
             // register all per-connection metrics at once
             sensors.maybeRegisterConnectionMetrics(channel.id());
             if (idleExpiryManager != null)
+                //更新channel的最近活跃时间
                 idleExpiryManager.update(channel.id(), currentTimeNanos);
 
             boolean sendFailed = false;
@@ -368,6 +394,7 @@ public class Selector implements Selectable, AutoCloseable {
                 /* complete any connections that have finished their handshake (either normally or immediately) */
                 if (isImmediatelyConnected || key.isConnectable()) {
                     if (channel.finishConnect()) {
+                        //如果连接建立完成添加到connected
                         this.connected.add(channel.id());
                         this.sensors.connectionCreated.record();
                         SocketChannel socketChannel = (SocketChannel) key.channel();
@@ -381,10 +408,13 @@ public class Selector implements Selectable, AutoCloseable {
                 }
 
                 /* if channel is not ready finish prepare */
+                //判断连接是否成功并且是否准备好
                 if (channel.isConnected() && !channel.ready())
+                    //进行握手和授权
                     channel.prepare();
 
                 /* if channel is ready read from any connections that have readable data */
+                //如果channel is ready并且可以读取数据则进行读取并添加到stagedReceives
                 if (channel.ready() && key.isReadable() && !hasStagedReceive(channel)) {
                     NetworkReceive networkReceive;
                     while ((networkReceive = channel.read()) != null)
@@ -392,6 +422,7 @@ public class Selector implements Selectable, AutoCloseable {
                 }
 
                 /* if channel is ready write to any sockets that have space in their buffer and for which we have data */
+                //如果channel已经准备好并且可以写数据则进行数据的写操作
                 if (channel.ready() && key.isWritable()) {
                     Send send = null;
                     try {
@@ -401,6 +432,7 @@ public class Selector implements Selectable, AutoCloseable {
                         throw e;
                     }
                     if (send != null) {
+                        //添加到completedSends
                         this.completedSends.add(send);
                         this.sensors.recordBytesSent(channel.id(), send.size());
                     }
@@ -508,6 +540,7 @@ public class Selector implements Selectable, AutoCloseable {
         this.connected.clear();
         this.disconnected.clear();
         // Remove closed channels after all their staged receives have been processed or if a send was requested
+        //如果所有的
         for (Iterator<Map.Entry<String, KafkaChannel>> it = closingChannels.entrySet().iterator(); it.hasNext(); ) {
             KafkaChannel channel = it.next().getValue();
             Deque<NetworkReceive> deque = this.stagedReceives.get(channel);
@@ -552,6 +585,7 @@ public class Selector implements Selectable, AutoCloseable {
         if (channel != null) {
             // There is no disconnect notification for local close, but updating
             // channel state here anyway to avoid confusion.
+            //设置kafkachannel statis
             channel.state(ChannelState.LOCAL_CLOSE);
             close(channel, false, false);
         } else {
@@ -578,10 +612,12 @@ public class Selector implements Selectable, AutoCloseable {
         if (processOutstanding && !notifyDisconnect)
             throw new IllegalStateException("Disconnect notification required for remote disconnect after processing outstanding requests");
 
+        //设置KafkaChannel disconnected=true，并取消注册的SelectKey
         channel.disconnect();
 
         // Ensure that `connected` does not have closed channels. This could happen if `prepare` throws an exception
         // in the `poll` invocation when `finishConnect` succeeds
+        //从connected中删除
         connected.remove(channel.id());
 
         // Keep track of closed channels with pending receives so that all received records

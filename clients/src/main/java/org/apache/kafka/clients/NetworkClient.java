@@ -329,6 +329,7 @@ public class NetworkClient implements KafkaClient {
      */
     @Override
     public void send(ClientRequest request, long now) {
+        //调用doSend
         doSend(request, false, now);
     }
 

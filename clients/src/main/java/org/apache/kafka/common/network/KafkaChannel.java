@@ -28,20 +28,19 @@ import java.security.Principal;
 import org.apache.kafka.common.utils.Utils;
 
 public class KafkaChannel {
+    //channel id
     private final String id;
+    //封装SelectionKey和SocketChannel
     private final TransportLayer transportLayer;
+    //认证器
     private final Authenticator authenticator;
-    // Tracks accumulated network thread time. This is updated on the network thread.
-    // The values are read and reset after each response is sent.
     private long networkThreadTimeNanos;
     private final int maxReceiveSize;
     private NetworkReceive receive;
     private Send send;
-    // Track connection and mute state of channels to enable outstanding requests on channels to be
-    // processed after the channel is disconnected.
     private boolean disconnected;
     private boolean muted;
-    private ChannelState state;
+    private ChannelState state;//默认为ChannelState.NOT_CONNECTED;
 
     public KafkaChannel(String id, TransportLayer transportLayer, Authenticator authenticator, int maxReceiveSize) throws IOException {
         this.id = id;
@@ -55,6 +54,7 @@ public class KafkaChannel {
     }
 
     public void close() throws IOException {
+        //真正的进行关闭
         this.disconnected = true;
         Utils.closeAll(transportLayer, authenticator);
     }
@@ -69,6 +69,7 @@ public class KafkaChannel {
     /**
      * Does handshake of transportLayer and authentication using configured authenticator
      */
+    //进行握手和授权，此处只有SSLTransportLayer才会使用
     public void prepare() throws IOException {
         if (!transportLayer.ready())
             transportLayer.handshake();
@@ -157,6 +158,7 @@ public class KafkaChannel {
         this.transportLayer.addInterestOps(SelectionKey.OP_WRITE);
     }
 
+    //读取r
     public NetworkReceive read() throws IOException {
         NetworkReceive result = null;
 

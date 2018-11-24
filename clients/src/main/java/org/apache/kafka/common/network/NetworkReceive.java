@@ -31,6 +31,7 @@ public class NetworkReceive implements Receive {
     public final static int UNLIMITED = -1;
 
     private final String source;
+    //固定为4个字节，数字表示数据体大小
     private final ByteBuffer size;
     private final int maxSize;
     private ByteBuffer buffer;
@@ -80,6 +81,7 @@ public class NetworkReceive implements Receive {
     // This can go away after we get rid of BlockingChannel
     @Deprecated
     public long readFromReadableChannel(ReadableByteChannel channel) throws IOException {
+        //记录size中读取的字节数
         int read = 0;
         if (size.hasRemaining()) {
             int bytesRead = channel.read(size);

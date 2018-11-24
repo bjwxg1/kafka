@@ -54,16 +54,19 @@ public final class Metadata {
     public static final long TOPIC_EXPIRY_MS = 5 * 60 * 1000;
     private static final long TOPIC_EXPIRY_NEEDS_UPDATE = -1L;
 
-    //更新失败的情况下，下一次更新的等待时间
+    //更新失败的情况下，下一次更新前的等待时间
     private final long refreshBackoffMs;
-    //元数据过期时间
+    //元数据过期时间缺省是600*1000，也就是10分种
     private final long metadataExpireMs;
+    //每更新成功1次，version递增1。这个变量主要用于在while循环，wait的时候，作为循环判断条件
     private int version;
-    //上一次刷新元数据时间
+    //上一次刷新元数据时间（包括失败情况）
     private long lastRefreshMs;
     //上一次成功刷新元数据时间
     private long lastSuccessfulRefreshMs;
+    //集群配置信息
     private Cluster cluster;
+    //是否需要更新
     private boolean needUpdate;
     /* Topics with expiry time */
     //存储topic过期时间
@@ -159,6 +162,8 @@ public final class Metadata {
         }
         long begin = System.currentTimeMillis();
         long remainingWaitMs = maxWaitMs;
+        //如果Sender获取metadata成功会更新version
+        //通过此循环等待获取数据成功或者超时
         while (this.version <= lastVersion) {
             if (remainingWaitMs != 0)
                 wait(remainingWaitMs);

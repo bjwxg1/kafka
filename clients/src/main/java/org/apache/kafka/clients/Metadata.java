@@ -94,7 +94,7 @@ public final class Metadata {
     public Metadata(long refreshBackoffMs, long metadataExpireMs, boolean allowAutoTopicCreation,
                     boolean topicExpiryEnabled, ClusterResourceListeners clusterResourceListeners) {
         this.refreshBackoffMs = refreshBackoffMs;
-        this.metadataExpireMs = metadataExpireMs;
+        this.metadataExpireMs = update();
         this.allowAutoTopicCreation = allowAutoTopicCreation;
         this.topicExpiryEnabled = topicExpiryEnabled;
         this.lastRefreshMs = 0L;
@@ -131,6 +131,7 @@ public final class Metadata {
      * current info can be updated (i.e. backoff time has elapsed); If an update has been request then the expiry time
      * is now
      */
+    //获取下次更新metadata时间
     public synchronized long timeToNextUpdate(long nowMs) {
         long timeToExpire = needUpdate ? 0 : Math.max(this.lastSuccessfulRefreshMs + this.metadataExpireMs - nowMs, 0);
         long timeToAllowUpdate = this.lastRefreshMs + this.refreshBackoffMs - nowMs;

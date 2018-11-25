@@ -237,18 +237,20 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
     private final int maxRequestSize;
     //producer端buffer size
     private final long totalMemorySize;
-    private final Metadata metadata;
-    private final RecordAccumulator accumulator;
-    private final Sender sender;
-    private final Thread ioThread;
-    private final CompressionType compressionType;
+    private final Metadata metadata;//元数据信息
+    private final RecordAccumulator accumulator;//kafka消息暂存器
+    private final Sender sender;//发送线程
+    private final Thread ioThread;//ioThread
+    private final CompressionType compressionType;//消息压缩类型
     private final Sensor errors;
     private final Time time;
+    //kafka消息序列化器
     private final ExtendedSerializer<K> keySerializer;
     private final ExtendedSerializer<V> valueSerializer;
     private final ProducerConfig producerConfig;
     //消息发送最大阻塞时间【buffer满或者metadta不可用】
     private final long maxBlockTimeMs;
+    //请求超时时间
     private final int requestTimeoutMs;
     private final ProducerInterceptors<K, V> interceptors;
     private final ApiVersions apiVersions;
@@ -327,7 +329,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             reporters.add(new JmxReporter(JMX_PREFIX));
             this.metrics = new Metrics(metricConfig, reporters, time);
 
-            //设置partitioner,partitioner决定消息具体发送到那个分区
+            //设置partitioner,partitioner决定消息具体发送到那个分区，默认为DefaultPartitioner
             this.partitioner = config.getConfiguredInstance(ProducerConfig.PARTITIONER_CLASS_CONFIG, Partitioner.class);
             //requset失败重试等待时间
             long retryBackoffMs = config.getLong(ProducerConfig.RETRY_BACKOFF_MS_CONFIG);
@@ -358,7 +360,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             this.interceptors = interceptorList.isEmpty() ? null : new ProducerInterceptors<>(interceptorList);
 
             ClusterResourceListeners clusterResourceListeners = configureClusterResourceListeners(keySerializer, valueSerializer, interceptorList, reporters);
-            //设置metadata
+            //设置metadat。ametadata.max.age.ms强制刷新metadata时间间隔默认300000ms
             this.metadata = new Metadata(retryBackoffMs, config.getLong(ProducerConfig.METADATA_MAX_AGE_CONFIG),
                     true, true, clusterResourceListeners);
             //一次发送的消息字节数
@@ -780,12 +782,14 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
     private Future<RecordMetadata> doSend(ProducerRecord<K, V> record, Callback callback) {
         TopicPartition tp = null;
         try {
-            //在消息发送前等待cluster信息可用
+            //在消息发送前等待cluster信息可用，可能回事发送线程wait
             ClusterAndWaitTime clusterAndWaitTime = waitOnMetadata(record.topic(), record.partition(), maxBlockTimeMs);
             //计算剩余等待时间
             long remainingWaitMs = Math.max(0, maxBlockTimeMs - clusterAndWaitTime.waitedOnMetadataMs);
             //获取集群信息
             Cluster cluster = clusterAndWaitTime.cluster;
+
+            //序列化
             byte[] serializedKey;
             try {
                 serializedKey = keySerializer.serialize(record.topic(), record.headers(), record.key());
@@ -809,8 +813,10 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             setReadOnly(record.headers());
             Header[] headers = record.headers().toArray();
 
+            //计算消息Size
             int serializedSize = AbstractRecords.estimateSizeInBytesUpperBound(apiVersions.maxUsableProduceMagic(),
                     compressionType, serializedKey, serializedValue, headers);
+            //保证消息大小合适
             ensureValidRecordSize(serializedSize);
             long timestamp = record.timestamp() == null ? time.milliseconds() : record.timestamp();
             log.trace("Sending record {} with callback {} to topic {} partition {}", record, callback, record.topic(), partition);

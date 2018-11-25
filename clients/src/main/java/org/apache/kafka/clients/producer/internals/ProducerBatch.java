@@ -56,16 +56,16 @@ public final class ProducerBatch {
 
     private static final Logger log = LoggerFactory.getLogger(ProducerBatch.class);
 
-    //发送状态枚举
+    //发送状态枚举：中断、失败和成功
     private enum FinalState { ABORTED, FAILED, SUCCEEDED }
     //创建时间
     final long createdMs;
     final TopicPartition topicPartition;
-    //发送结果
     final ProduceRequestResult produceFuture;
 
     private final List<Thunk> thunks = new ArrayList<>();
     private final MemoryRecordsBuilder recordsBuilder;
+    //尝试次数计数器
     private final AtomicInteger attempts = new AtomicInteger(0);
     private final boolean isSplitBatch;
     private final AtomicReference<FinalState> finalState = new AtomicReference<>(null);
@@ -76,6 +76,7 @@ public final class ProducerBatch {
     private long lastAppendTime;
     private long drainedMs;
     private String expiryErrorMessage;
+    //是否重试
     private boolean retry;
 
     public ProducerBatch(TopicPartition tp, MemoryRecordsBuilder recordsBuilder, long now) {
@@ -102,6 +103,7 @@ public final class ProducerBatch {
      * @return The RecordSend corresponding to this record or null if there isn't sufficient room.
      */
     public FutureRecordMetadata tryAppend(long timestamp, byte[] key, byte[] value, Header[] headers, Callback callback, long now) {
+        //判断当前Batch是否还有空间添加消息
         if (!recordsBuilder.hasRoomFor(timestamp, key, value, headers)) {
             return null;
         } else {

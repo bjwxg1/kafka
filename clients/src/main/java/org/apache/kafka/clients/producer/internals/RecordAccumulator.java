@@ -68,20 +68,23 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class RecordAccumulator {
 
     private static final Logger log = LoggerFactory.getLogger(RecordAccumulator.class);
-    //一些参数设置
+    //关闭表示
     private volatile boolean closed;
+    //计数器
     private final AtomicInteger flushesInProgress;
     private final AtomicInteger appendsInProgress;
     private final int batchSize;
     private final CompressionType compression;
+    //消息发送前等待时间，为了减少请求数
     private final long lingerMs;
+    //重试等待时间
     private final long retryBackoffMs;
     private final BufferPool free;
     private final Time time;
     private final ApiVersions apiVersions;
     //存放消息的地方key：topic-partition,value:双端队列
     private final ConcurrentMap<TopicPartition, Deque<ProducerBatch>> batches;
-    //为成功发送的batch
+    //未成功发送的batch
     private final IncompleteBatches incomplete;
     // The following variables are only accessed by the sender thread, so we don't need to protect them.
     private final Set<TopicPartition> muted;
@@ -215,15 +218,15 @@ public final class RecordAccumulator {
                 // Need to check if producer is closed again after grabbing the dequeue lock.
                 if (closed)
                     throw new IllegalStateException("Cannot send after the producer is closed.");
+                //再次尝试append
                 RecordAppendResult appendResult = tryAppend(timestamp, key, value, headers, callback, dq);
                 if (appendResult != null) {
                     // Somebody else found us a batch, return the one we waited for! Hopefully this doesn't happen often...
                     return appendResult;
                 }
 
-                //如果重新发送消息继续失败，构建MemoryRecordsBuilder
+                //如果重新发送消息继续失败，构建MemoryRecordsBuilder和Batch
                 MemoryRecordsBuilder recordsBuilder = recordsBuilder(buffer, maxUsableMagic);
-                //创建新的batch
                 ProducerBatch batch = new ProducerBatch(tp, recordsBuilder, time.milliseconds());
                 //继续尝试添加
                 FutureRecordMetadata future = Utils.notNull(batch.tryAppend(timestamp, key, value, headers, callback, time.milliseconds()));

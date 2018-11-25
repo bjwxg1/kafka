@@ -40,6 +40,7 @@ public class MemoryRecordsBuilder {
     private static final float COMPRESSION_RATE_ESTIMATION_FACTOR = 1.05f;
 
     private final TimestampType timestampType;
+    //压缩类型
     private final CompressionType compressionType;
     // Used to append records, may compress data on the fly
     private final DataOutputStream appendStream;

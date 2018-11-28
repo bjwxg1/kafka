@@ -156,9 +156,10 @@ public class Sender implements Runnable {
     public void run() {
         log.debug("Starting Kafka producer I/O thread.");
 
-        //主循环，在close之前一直运行
+        //主循环，在kakfaProducer close之前一直运行
         while (running) {
             try {
+                //调用run()方法进行消息的发送
                 run(time.milliseconds());
             } catch (Exception e) {
                 log.error("Uncaught error in kafka producer I/O thread: ", e);
@@ -170,7 +171,7 @@ public class Sender implements Runnable {
         // okay we stopped accepting requests but there may still be
         // requests in the accumulator or waiting for acknowledgment,
         // wait until these are completed.
-        //如果不是强制关闭，并且accumulator中还有未发送的数据或者等待ack的request继续运行
+        //如果不是强制关闭，并且accumulator中还有未发送的数据或者等待ack的request继续运行等待消息发送完成
         while (!forceClose && (this.accumulator.hasUndrained() || this.client.inFlightRequestCount() > 0)) {
             try {
                 run(time.milliseconds());
@@ -235,6 +236,7 @@ public class Sender implements Runnable {
         if (!result.unknownLeaderTopics.isEmpty()) {
             for (String topic : result.unknownLeaderTopics)
                 this.metadata.add(topic);
+            //设置metadata为需要更新
             this.metadata.requestUpdate();
         }
 
@@ -251,8 +253,11 @@ public class Sender implements Runnable {
         }
 
         // create produce requests
+        //此处方法是根据readyNode在accumulator中获取各个Node中可以发送的ProducerBatch
+        //Key--》Node.id;Value==>可以发送的ProducerBatch集合
         Map<Integer, List<ProducerBatch>> batches = this.accumulator.drain(cluster, result.readyNodes,
                 this.maxRequestSize, now);
+        //TODO
         if (guaranteeMessageOrder) {
             // Mute all the partitions drained
             for (List<ProducerBatch> batchList : batches.values()) {
@@ -494,6 +499,7 @@ public class Sender implements Runnable {
     private void completeBatch(ProducerBatch batch, ProduceResponse.PartitionResponse response, long correlationId,
                                long now) {
         Errors error = response.error;
+        //根据判断是否失败的原因是消息过大
         if (error == Errors.MESSAGE_TOO_LARGE && batch.recordCount > 1 &&
                 (batch.magic() >= RecordBatch.MAGIC_VALUE_V2 || batch.isCompressed())) {
             // If the batch is too large, we split the batch and send the split batches again. We do not decrement
@@ -503,7 +509,9 @@ public class Sender implements Runnable {
                      batch.topicPartition,
                      this.retries - batch.attempts(),
                      error);
+            //将大的batch拆分成小的batch添加到accumulator
             this.accumulator.splitAndReenqueue(batch);
+            //释放过大的batch
             this.accumulator.deallocate(batch);
             this.sensors.recordBatchSplit();
         } else if (error != Errors.NONE) {
@@ -514,6 +522,7 @@ public class Sender implements Runnable {
                         this.retries - batch.attempts() - 1,
                         error);
                 if (transactionManager == null) {
+                    //重新入队，需要注意的是入队时是添加在队列的头部
                     reenqueueBatch(batch, now);
                 } else if (transactionManager.hasProducerIdAndEpoch(batch.producerId(), batch.producerEpoch())) {
                     // If idempotence is enabled only retry the request if the current producer id is the same as
@@ -536,9 +545,11 @@ public class Sender implements Runnable {
                 else
                     exception = error.exception();
                 // tell the user the result of their request
+                //返回失败
                 failBatch(batch, response, exception);
                 this.sensors.recordErrors(batch.topicPartition.topic(), batch.recordCount);
             }
+            //如果是元数据无效则更新元数据
             if (error.exception() instanceof InvalidMetadataException) {
                 if (error.exception() instanceof UnknownTopicOrPartitionException)
                     log.warn("Received unknown topic or partition error in produce request on partition {}. The " +
@@ -547,6 +558,7 @@ public class Sender implements Runnable {
             }
 
         } else {
+            //完成消息发送，释放内存
             completeBatch(batch, response);
         }
 
@@ -628,6 +640,7 @@ public class Sender implements Runnable {
         final Map<TopicPartition, ProducerBatch> recordsByPartition = new HashMap<>(batches.size());
 
         // find the minimum magic version used when creating the record sets
+        //获取最小的magic version？此处难道是做兼容
         byte minUsedMagic = apiVersions.maxUsableProduceMagic();
         for (ProducerBatch batch : batches) {
             if (batch.magic() < minUsedMagic)

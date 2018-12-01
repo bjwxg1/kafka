@@ -160,18 +160,23 @@ public class KafkaChannel {
         this.transportLayer.addInterestOps(SelectionKey.OP_WRITE);
     }
 
-    //读取r
+    //循环读取解决拆包和粘包问题
     public NetworkReceive read() throws IOException {
         NetworkReceive result = null;
-
         if (receive == null) {
             receive = new NetworkReceive(maxReceiveSize, id);
         }
-
+        //调用receive读取数据
         receive(receive);
+
+        //注意这里的complete判断,结合调用当的循环完成拆包和粘包
+        //!size.hasRemaining() && !buffer.hasRemaining()
+        //如果返回true表明返回一个完整的数据包，否则返回null
         if (receive.complete()) {
+            //rewind payLoad
             receive.payload().rewind();
             result = receive;
+            //将receive设置为null
             receive = null;
         }
         return result;

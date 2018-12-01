@@ -267,7 +267,7 @@ public class Sender implements Runnable {
         //Key--》Node.id;Value==>可以发送的ProducerBatch集合
         Map<Integer, List<ProducerBatch>> batches = this.accumulator.drain(cluster, result.readyNodes,
                 this.maxRequestSize, now);
-        //TODO
+        //如果需要保证消息的顺序性。则将这个topicPartition添加到mutePartition
         if (guaranteeMessageOrder) {
             // Mute all the partitions drained
             for (List<ProducerBatch> batchList : batches.values()) {
@@ -276,6 +276,7 @@ public class Sender implements Runnable {
             }
         }
 
+        //获取在Accumulator中等待时间较长的ProducerBatch
         List<ProducerBatch> expiredBatches = this.accumulator.expiredBatches(this.requestTimeout, now);
         boolean needsTransactionStateReset = false;
         // Reset the producer id if an expired batch has previously been sent to the broker. Also update the metrics

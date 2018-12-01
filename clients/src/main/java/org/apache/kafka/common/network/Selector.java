@@ -291,18 +291,14 @@ public class Selector implements Selectable, AutoCloseable {
             //获取KafkaChannel
             KafkaChannel channel = channelOrFail(connectionId, false);
             try {
-                //设置send【注意只能放置一个】，并在底层注册Write时间
+                //设置send，并在底层注册Write事件
                 channel.setSend(send);
             } catch (Exception e) {
-                // update the state for consistency, the channel will be discarded after `close`
                 channel.state(ChannelState.FAILED_SENDFAILED_SEND);
-                // ensure notification via `disconnected` when `failedSends` are processed in the next poll
                 this.failedSends.add(connectionId);
                 //调用close方法进行关闭
                 close(channel, false, false);
                 if (!(e instanceof CancelledKeyException)) {
-                    log.error("Unexpected exception during send, closing connection {} and rethrowing exception {}",
-                            connectionId, e);
                     throw e;
                 }
             }

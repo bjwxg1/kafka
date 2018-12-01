@@ -399,7 +399,9 @@ public class NetworkClient implements KafkaClient {
                         header.apiVersion(), clientRequest.apiKey(), request, clientRequest.correlationId(), nodeId);
             }
         }
+        //创建NetworkSend
         Send send = request.toSend(nodeId, header);
+        //创建InFlightRequest
         InFlightRequest inFlightRequest = new InFlightRequest(
                 header,
                 clientRequest.createdTimeMs(),
@@ -410,7 +412,9 @@ public class NetworkClient implements KafkaClient {
                 request,
                 send,
                 now);
+        //将inFlightRequests
         this.inFlightRequests.add(inFlightRequest);
+        //调用select的Send方法
         selector.send(inFlightRequest.send);
     }
 

@@ -57,6 +57,7 @@ public class ByteBufferSend implements Send {
 
     @Override
     public long writeTo(GatheringByteChannel channel) throws IOException {
+        //调用底层的channel进行写操作
         long written = channel.write(buffers);
         if (written < 0)
             throw new EOFException("Wrote negative bytes to channel. This shouldn't happen.");

@@ -88,6 +88,7 @@ public class NetworkReceive implements Receive {
             if (bytesRead < 0)
                 throw new EOFException();
             read += bytesRead;
+            //如果size没有剩余
             if (!size.hasRemaining()) {
                 size.rewind();
                 int receiveSize = size.getInt();
@@ -95,7 +96,7 @@ public class NetworkReceive implements Receive {
                     throw new InvalidReceiveException("Invalid receive (size = " + receiveSize + ")");
                 if (maxSize != UNLIMITED && receiveSize > maxSize)
                     throw new InvalidReceiveException("Invalid receive (size = " + receiveSize + " larger than " + maxSize + ")");
-
+                //重新分配BUFFER
                 this.buffer = ByteBuffer.allocate(receiveSize);
             }
         }

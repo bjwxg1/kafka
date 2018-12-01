@@ -438,19 +438,22 @@ public final class RecordAccumulator {
      */
     public Map<Integer, List<ProducerBatch>> drain(Cluster cluster,
                                                    Set<Node> nodes,
-                                                   int maxSize,
-                                                   long now) {
+                                                   int maxSize, long now) {
+        //nodes为空直接返回
         if (nodes.isEmpty())
             return Collections.emptyMap();
 
         Map<Integer, List<ProducerBatch>> batches = new HashMap<>();
         for (Node node : nodes) {
             int size = 0;
+            //获取node上的所有partition信息
             List<PartitionInfo> parts = cluster.partitionsForNode(node.id());
             List<ProducerBatch> ready = new ArrayList<>();
             /* to make starvation less likely this loop doesn't start at 0 */
+            //防止饥饿发生
             int start = drainIndex = drainIndex % parts.size();
             do {
+                //根据drainIndex获取partition信息
                 PartitionInfo part = parts.get(drainIndex);
                 TopicPartition tp = new TopicPartition(part.topic(), part.partition());
                 // Only proceed if the partition has no in-flight batches.
@@ -460,9 +463,11 @@ public final class RecordAccumulator {
                         synchronized (deque) {
                             ProducerBatch first = deque.peekFirst();
                             if (first != null) {
+                                //判断第一个ProducerBatch是否能够发送，如果能返回false
                                 boolean backoff = first.attempts() > 0 && first.waitedTimeMs(now) < retryBackoffMs;
                                 // Only drain the batch if it is not during backoff period.
                                 if (!backoff) {
+                                    //判断size是的已经超过maxSize
                                     if (size + first.sizeInBytes() > maxSize && !ready.isEmpty()) {
                                         // there is a rare case that a single batch size is larger than the request size due
                                         // to compression; in this case we will still eventually send this batch in a single

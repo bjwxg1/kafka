@@ -398,7 +398,7 @@ public class KafkaProducer<K, V> implements Producer<K, V> {
             List<InetSocketAddress> addresses = ClientUtils.parseAndValidateAddresses(config.getList(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG));
             //创建cluster并更新metadata
             this.metadata.update(Cluster.bootstrap(addresses), Collections.<String>emptySet(), time.milliseconds());
-            //创建具体的ChannelBuilder
+            //创建具体的ChannelBuilder【主要根据安全策略创建不同的ChannelBuilder】
             ChannelBuilder channelBuilder = ClientUtils.createChannelBuilder(config);
             Sensor throttleTimeSensor = Sender.throttleTimeSensor(metrics);
             //创建NetWorkClient

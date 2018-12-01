@@ -30,13 +30,15 @@ import org.apache.kafka.common.utils.Utils;
 public class KafkaChannel {
     //channel id
     private final String id;
-    //封装SelectionKey和SocketChannel
+    //封装SelectionKey和SocketChannel，用于真正的通信
     private final TransportLayer transportLayer;
     //认证器
     private final Authenticator authenticator;
     private long networkThreadTimeNanos;
     private final int maxReceiveSize;
+    //封装接收到的数据流
     private NetworkReceive receive;
+    //封装要发送的数据流
     private Send send;
     private boolean disconnected;
     private boolean muted;

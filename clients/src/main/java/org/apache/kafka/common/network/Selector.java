@@ -85,17 +85,22 @@ public class Selector implements Selectable, AutoCloseable {
     public static final long NO_IDLE_TIMEOUT_MS = -1;
     private static final Logger log = LoggerFactory.getLogger(Selector.class);
 
-    //内置的nioSelector
+    //内置的Java nioSelector，所有的网络相关的操作都通过该nioSelector
     private final java.nio.channels.Selector nioSelector;
     //保存了所有的KafkaChannel
     private final Map<String, KafkaChannel> channels;
+    //已经完成的Send
     private final List<Send> completedSends;
+    //已经完成Receive
     private final List<NetworkReceive> completedReceives;
     //暂存所有接收到的消息
     private final Map<KafkaChannel, Deque<NetworkReceive>> stagedReceives;
     private final Set<SelectionKey> immediatelyConnectedKeys;
+    //Closing状态的Channel
     private final Map<String, KafkaChannel> closingChannels;
+    //disconnected状态的kafkaChannel
     private final Map<String, ChannelState> disconnected;
+    //connected状态的Channel
     private final List<String> connected;
     private final List<String> failedSends;
     private final Time time;

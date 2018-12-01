@@ -77,42 +77,52 @@ public class Sender implements Runnable {
     private static final Logger log = LoggerFactory.getLogger(Sender.class);
 
     /* the state of each nodes connection */
+    //KafkaClient
     private final KafkaClient client;
 
     /* the record accumulator that batches records */
     private final RecordAccumulator accumulator;
 
     /* the metadata for the client */
+    //元数据信息
     private final Metadata metadata;
 
     /* the flag indicating whether the producer should guarantee the message order on the broker or not. */
+    //是否保证消息顺序
     private final boolean guaranteeMessageOrder;
 
     /* the maximum request size to attempt to send to the server */
+    // maximum request size
     private final int maxRequestSize;
 
     /* the number of acknowledgements to request from the server */
+    //ack配置
     private final short acks;
 
     /* the number of times to retry a failed request before giving up */
+    //重试次数
     private final int retries;
 
     /* the clock instance used for getting the time */
     private final Time time;
 
     /* true while the sender thread is still running */
+    //运行状态
     private volatile boolean running;
 
     /* true when the caller wants to ignore all unsent/inflight messages and force close.  */
+
     private volatile boolean forceClose;
 
     /* metrics */
     private final SenderMetrics sensors;
 
     /* the max time to wait for the server to respond to the request*/
+    //请求超时时间
     private final int requestTimeout;
 
     /* The max time to wait before retrying a request which has failed */
+    //重试等待时间
     private final long retryBackoffMs;
 
     /* current request API versions supported by the known brokers */

@@ -34,6 +34,7 @@ public interface KafkaClient extends Closeable {
      * @param node The node to check
      * @param now The current timestamp
      */
+    //判断是否准备向指定的Node发送请求
     boolean isReady(Node node, long now);
 
     /**
@@ -44,6 +45,7 @@ public interface KafkaClient extends Closeable {
      * @param now The current time
      * @return true iff we are ready to immediately initiate the sending of another request to the given node.
      */
+    //启动与指定节点的连接，如果成功返回True
     boolean ready(Node node, long now);
 
     /**
@@ -55,6 +57,9 @@ public interface KafkaClient extends Closeable {
      * @param now The current timestamp
      * @return The number of milliseconds to wait.
      */
+    //在尝试发送数据之前，基于连接状态返回等待的毫秒数。
+    // 当连接状态为disconnected，返回重连等待时间。
+    // 当连接状态为 connecting or connected，此处理缓慢/停止连接。
     long connectionDelay(Node node, long now);
 
     /**
@@ -65,6 +70,7 @@ public interface KafkaClient extends Closeable {
      * @param node the node to check
      * @return true iff the connection has failed and the node is disconnected
      */
+    //根据connection状态检查连接是否失败
     boolean connectionFailed(Node node);
 
     /**
@@ -72,6 +78,7 @@ public interface KafkaClient extends Closeable {
      * @param request The request
      * @param now The current timestamp
      */
+    //将ClientRequest加入到Queue等待发送
     void send(ClientRequest request, long now);
 
     /**
@@ -83,6 +90,7 @@ public interface KafkaClient extends Closeable {
      * @param now The current time in ms
      * @throws IllegalStateException If a request is sent to an unready node
      */
+    //读写操作
     List<ClientResponse> poll(long timeout, long now);
 
     /**

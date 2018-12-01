@@ -62,22 +62,25 @@ public class NetworkClient implements KafkaClient {
     private static final Logger log = LoggerFactory.getLogger(NetworkClient.class);
 
     /* the selector used to perform network i/o */
+    //selector
     private final Selectable selector;
-
     private final MetadataUpdater metadataUpdater;
-
     private final Random randOffset;
 
     /* the state of each node's connection */
+    //与Broker各个节点的连接状态
     private final ClusterConnectionStates connectionStates;
 
     /* the set of requests currently being sent or awaiting a response */
+    //等待发送或响应的requests集合
     private final InFlightRequests inFlightRequests;
 
     /* the socket send buffer size in bytes */
+    //发送缓冲区大小
     private final int socketSendBuffer;
 
     /* the socket receive size buffer in bytes */
+    //接收缓冲区大小
     private final int socketReceiveBuffer;
 
     /* the client id used to identify this client in requests to the server */
@@ -87,9 +90,11 @@ public class NetworkClient implements KafkaClient {
     private int correlation;
 
     /* max time in ms for the producer to wait for acknowledgement from server*/
+    //请求超时时间
     private final int requestTimeoutMs;
 
     /* time in ms to wait before retrying to create connection to a server */
+    //重连等待时间
     private final long reconnectBackoffMs;
 
     private final Time time;

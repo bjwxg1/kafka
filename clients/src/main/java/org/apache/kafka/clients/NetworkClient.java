@@ -651,6 +651,9 @@ public class NetworkClient implements KafkaClient {
      */
     private void handleCompletedSends(List<ClientResponse> responses, long now) {
         // if no response is expected then when the send is completed, return it
+        //遍历completedSends，根据send的destination从inFlightRequests取出InFlightRequest
+        //如果InFlightRequest不需要返回结果则直接从nFlightRequests中删除
+        //如果需要返回结果暂不处理
         for (Send send : this.selector.completedSends()) {
             InFlightRequest request = this.inFlightRequests.lastSent(send.destination());
             if (!request.expectResponse) {
@@ -669,6 +672,7 @@ public class NetworkClient implements KafkaClient {
     private void handleCompletedReceives(List<ClientResponse> responses, long now) {
         for (NetworkReceive receive : this.selector.completedReceives()) {
             String source = receive.source();
+            //根据source获取下一个将要完成的InFlightRequest
             InFlightRequest req = inFlightRequests.completeNext(source);
             Struct responseStruct = parseStructMaybeUpdateThrottleTimeMetrics(receive.payload(), req.header,
                 throttleTimeSensor, now);
@@ -677,8 +681,10 @@ public class NetworkClient implements KafkaClient {
                     ApiKeys.forId(req.header.apiKey()), req.header.correlationId(), responseStruct);
             }
             AbstractResponse body = createResponse(responseStruct, req.header);
+            //如果是metaData的响应，进行metaData的处理
             if (req.isInternalRequest && body instanceof MetadataResponse)
                 metadataUpdater.handleCompletedMetadataResponse(req.header, now, (MetadataResponse) body);
+            //根据请求类型进行相应处理
             else if (req.isInternalRequest && body instanceof ApiVersionsResponse)
                 handleApiVersionsResponse(responses, req, now, (ApiVersionsResponse) body);
             else
